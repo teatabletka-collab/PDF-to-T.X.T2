@@ -184,45 +184,52 @@ class MainActivity : AppCompatActivity() {
         }
 
         val tess = TessBaseAPI()
-        val initOk = tess.init(tessDataPath, "rus+eng")
-        if (!initOk) {
-            tess.recycle()
-            return "Не удалось инициализировать Tesseract. Проверьте файлы traineddata."
-        }
-
-        tess.pageSegMode = TessBaseAPI.PageSegMode.PSM_AUTO
-
-        val renderer = PDFRenderer(document)
-        val result = StringBuilder()
-        val scale = 2.0f // ≈ 144 DPI
-
-        for (i in 0 until pageCount) {
-            runOnUiThread {
-                status.text = "OCR: страница ${i + 1} из $pageCount…"
+        
+        try {
+            val initOk = tess.init(tessDataPath, "rus+eng")
+            if (!initOk) {
+                return "Не удалось инициализировать Tesseract. Проверьте файлы traineddata."
             }
 
-            val bitmap: Bitmap = try {
-                renderer.renderImage(i, scale, ImageType.RGB)
-            } catch (e: Exception) {
-                result.append("\n[Ошибка рендера страницы ${i + 1}]\n")
-                continue
-            }
+            tess.pageSegMode = TessBaseAPI.PageSegMode.PSM_AUTO
 
-            try {
-                tess.setImage(bitmap)
-                val pageText = tess.utF8Text?.trim().orEmpty()
-                if (pageText.isNotEmpty()) {
-                    result.append("----- Страница ${i + 1} -----\n")
-                    result.append(pageText)
-                    result.append("\n\n")
+            val renderer = PDFRenderer(document)
+            val result = StringBuilder()
+            val scale = 2.0f // ≈ 144 DPI
+
+            for (i in 0 until pageCount) {
+                runOnUiThread {
+                    status.text = "OCR: страница ${i + 1} из $pageCount…"
                 }
-            } finally {
-                bitmap.recycle()
-            }
-        }
 
-        tess.recycle()
-        return result.toString().trim()
+                val bitmap: Bitmap = try {
+                    renderer.renderImage(i, scale, ImageType.RGB)
+                } catch (e: Exception) {
+                    result.append("\n[Ошибка рендера страницы ${i + 1}]\n")
+                    continue
+                }
+
+                try {
+                    tess.setImage(bitmap)
+                    val pageText = tess.utF8Text?.trim().orEmpty()
+                    if (pageText.isNotEmpty()) {
+                        result.append("----- Страница ${i + 1} -----\n")
+                        result.append(pageText)
+                        result.append("\n\n")
+                    }
+                } finally {
+                    // ✅ ПРАВИЛЬНО: освобождаем память Bitmap сразу после использования
+                    bitmap.recycle()
+                }
+            }
+
+            return result.toString().trim()
+            
+        } finally {
+            // ✅ ПРАВИЛЬНО: ГАРАНТИРОВАННО освобождаем нативную память Tesseract, 
+            // даже если внутри блока try произошла какая-либо ошибка.
+            tess.end()
+        }
     }
 
     private fun prepareTessData(): String? {
